@@ -1,0 +1,40 @@
+Project Overview
+Mindly is an AI-powered mental health assistant chatbot that provides empathetic support through text and voice interactions. The system analyzes user conversations to generate mental health insights, including anxiety/stress scores, keyword trends, and personalized recommendations. Built with Flask, Ollama, and Pinecone, it features user authentication, chat history storage, and a dynamic dashboard.
+
+Key Features
+AI Chat Support
+
+Text & voice chat with a mental health-focused LLM (Mistral 7B)
+
+Context-aware responses using Pinecone vector search
+
+User Authentication
+
+Secure registration/login with bcrypt password hashing
+
+Session management
+
+Analytics Dashboard
+
+Anxiety/Stress/Mental Health scores (0-100)
+
+Animated progress bars
+
+Interactive word cloud of top keywords
+
+Personalized recommendations
+
+Smart Analysis
+
+Automatic insights after every 5 messages
+
+Historical data stored in MySQL
+
+Modern UI
+
+Frosted glass effect with cloud background
+
+Dark/light mode toggle
+
+Responsive design
+

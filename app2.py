@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, redirect, url_for, g, session
 from src.helper import download_hugging_face_embeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_ollama import OllamaLLM
+from langchain.chat_models import ChatOpenAI
+
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from sentence_transformers import SentenceTransformer, util
@@ -13,6 +15,8 @@ from flask_wtf import FlaskForm
 import pymysql
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email
+from langchain.prompts import PromptTemplate
+import json
 
 # ─── Logging ─────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -55,6 +59,7 @@ def close_db(exc):
 # Load environment variables
 load_dotenv()
 os.environ["PINECONE_API_KEY"] = os.getenv("PINECONE_API_KEY")
+openrouter_api_key = os.getenv('OPENROUTESERVICE_API_KEY')
 
 # ─── Pinecone retriever ──────────────────────────────────────────────────────────
 embeddings = download_hugging_face_embeddings()
@@ -65,7 +70,12 @@ docsearch = PineconeVectorStore.from_existing_index(
 retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 
 # ─── LLM & prompt ───────────────────────────────────────────────────────────────
-llm = OllamaLLM(model="mistral:7b", temperature=0.4, top_p=0.9, max_tokens=300, repeat_penalty=1.1)
+# llm = OllamaLLM(model="mistral:7b", temperature=0.4, top_p=0.9, max_tokens=300, repeat_penalty=1.1)
+llm = ChatOpenAI(
+    model_name="deepseek/deepseek-r1-0528-qwen3-8b:free",  
+    openai_api_key = openrouter_api_key,
+    openai_api_base="https://openrouter.ai/api/v1"
+)
 system_prompt = (
     "You are Mindly, a kind and empathetic mental health assistant. "
     "Your responses should be helpful, calming, and clearly formatted. "
@@ -195,6 +205,105 @@ def save_message():
 # def index():
 #     return render_template("chat2.html")
 # Update the index route
+def generate_mental_health_insights(user_id):
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        # Get all user messages
+        cursor.execute("""
+            SELECT user_message FROM messages 
+            WHERE user_id = %s 
+            ORDER BY created_at ASC
+        """, (user_id,))
+        messages = cursor.fetchall()
+        
+        if not messages:
+            return None
+            
+        result = '. '.join(msg['user_message'] for msg in messages) + '.'
+        
+        # Generate analysis
+        prompt_template = PromptTemplate.from_template("""
+        You are a mental health assistant. Analyze the following conversation history from a user:
+        {user_messages}
+
+        Return a JSON with:
+        - anxiety_score (0–100)
+        - stress_score (0–100)
+        - mental_health_score (0–100)
+        - top_keywords (5–10 keywords)
+        - recommendations (2 tips to improve well-being)
+
+        Respond only in JSON format.
+        """)
+
+        formatted_prompt = prompt_template.format(user_messages=result)
+        raw_response = llm.invoke(formatted_prompt)
+
+        try:
+            scores = json.loads(raw_response)
+            return {
+                "user_id": user_id,
+                "anxiety_score": scores["anxiety_score"],
+                "stress_score": scores["stress_score"],
+                "mental_health_score": scores["mental_health_score"],
+                "top_keywords": json.dumps(scores["top_keywords"]),
+                "recommendations": json.dumps(scores["recommendations"])
+            }
+        except Exception as e:
+            logging.error(f"Error parsing LLM response: {str(e)}")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Insight generation error: {str(e)}")
+        return None
+    finally:
+        cursor.close()
+@app.route("/dashboard")
+def dashboard():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        # Get latest analysis
+        cursor.execute("""
+            SELECT * FROM mental_health_scores 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """, (session['user_id'],))
+        analysis = cursor.fetchone()
+
+        if analysis:
+            scores = {
+                "anxiety_score": analysis["anxiety_score"],
+                "stress_score": analysis["stress_score"],
+                "mental_health_score": analysis["mental_health_score"],
+                "top_keywords": json.loads(analysis["top_keywords"]),
+                "recommendations": json.loads(analysis["recommendations"]),
+                "last_updated": analysis["created_at"].strftime("%b %d, %Y %H:%M")
+            }
+            return render_template("dashboard.html", scores=scores)
+        else:
+            # Check message count for progress
+            cursor.execute("""
+                SELECT COUNT(*) as message_count 
+                FROM messages 
+                WHERE user_id = %s
+            """, (session['user_id'],))
+            count = cursor.fetchone()["message_count"]
+            remaining = 5 - (count % 5)
+            return render_template("dashboard.html", scores=None, remaining=remaining)
+            
+    except Exception as e:
+        logging.error(f"Dashboard error: {str(e)}")
+        return render_template("dashboard.html", scores=None)
+    finally:
+        cursor.close()
 @app.route("/")
 def index():
     return render_template("landing.html")
@@ -295,6 +404,30 @@ def chat():
                 "INSERT INTO messages (user_id, user_message, bot_message) VALUES (%s, %s, %s)",
                 (session["user_id"], decoded_msg, answer)
             )
+            db.commit()
+            cursor.execute("""
+            SELECT COUNT(*) as message_count 
+            FROM messages 
+            WHERE user_id = %s
+        """, (session["user_id"],))
+        count = cursor.fetchone()["message_count"]
+        
+        if count % 5 == 0:
+            insights = generate_mental_health_insights(session["user_id"])
+            if insights:
+                cursor.execute("""
+                    INSERT INTO mental_health_scores 
+                    (user_id, anxiety_score, stress_score, mental_health_score, top_keywords, recommendations)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    insights["user_id"],
+                    insights["anxiety_score"],
+                    insights["stress_score"],
+                    insights["mental_health_score"],
+                    insights["top_keywords"],
+                    insights["recommendations"]
+                ))
+            
             db.commit()
             cursor.close()
         return answer

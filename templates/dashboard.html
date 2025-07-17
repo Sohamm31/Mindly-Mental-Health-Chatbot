@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dashboard-main">
+    <h2 class="dashboard-title">Your Mental Health Insights</h2>
+    
+    {% if scores %}
+    <!-- Scores Section -->
+    <div class="score-container">
+        <div class="score-card">
+            <h3>Anxiety Level</h3>
+            <div class="score-bar">
+                <div class="score-fill" data-score="{{ scores.anxiety_score }}"></div>
+            </div>
+            <span class="score-value">{{ scores.anxiety_score }}/100</span>
+        </div>
+        
+        <div class="score-card">
+            <h3>Stress Level</h3>
+            <div class="score-bar">
+                <div class="score-fill" data-score="{{ scores.stress_score }}"></div>
+            </div>
+            <span class="score-value">{{ scores.stress_score }}/100</span>
+        </div>
+        
+        <div class="score-card">
+            <h3>Overall Mental Health</h3>
+            <div class="score-bar">
+                <div class="score-fill" data-score="{{ scores.mental_health_score }}"></div>
+            </div>
+            <span class="score-value">{{ scores.mental_health_score }}/100</span>
+        </div>
+    </div>
+
+    <!-- Word Cloud Section -->
+    <div class="word-cloud-section">
+        <h3>Top Keywords</h3>
+        <div class="word-cloud">
+            {% for word in scores.top_keywords %}
+                <span class="word" style="--size: {{ loop.index }}">{{ word }}</span>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="recommendations-section">
+        <h3>Personalized Recommendations</h3>
+        <ul class="recommendations-list">
+            {% for recommendation in scores.recommendations %}
+                <li>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+        <h3>📊 Insights Pending</h3>
+        <p>Complete {{ remaining }} more chats to generate analysis!</p>
+        <div class="progress-bar">
+            <div class="progress progress-{{ 5 - remaining }}"></div>
+            <span>{{ 5 - remaining }}/5 messages</span>
+        </div>
+    </div>
+    {% endif %}
+    
+    
+</div>
+<style>
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        background: var(--chat-bg);
+        border-radius: 15px;
+        margin-top: 2rem;
+    }
+    .progress {
+        height: 100%;
+        background: var(--accent-color);
+        transition: width 0.5s ease;
+    }
+    .progress-bar {
+        height: 25px;
+        background: var(--message-received);
+        border-radius: 12px;
+        margin: 1.5rem auto;
+        max-width: 300px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .progress-bar span {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-weight: bold;
+        mix-blend-mode: difference;
+    }
+    .dashboard-main {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .dashboard-title {
+        text-align: center;
+        margin-bottom: 2rem;
+        color: var(--accent-color);
+    }
+
+    .score-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+
+    .score-card {
+        background: var(--chat-bg);
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .score-bar {
+        height: 20px;
+        background: var(--message-received);
+        border-radius: 10px;
+        margin: 1rem 0;
+        overflow: hidden;
+    }
+
+    .score-fill {
+        height: 100%;
+        background: var(--accent-color);
+        width: 0;
+        border-radius: 10px;
+        transition: width 1s ease-out;
+    }
+
+    .score-value {
+        display: block;
+        text-align: center;
+        font-weight: bold;
+        color: var(--text-primary);
+    }
+
+    .word-cloud-section {
+        background: var(--chat-bg);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+    }
+
+    .word-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+    }
+
+    .word {
+        padding: 0.5rem 1rem;
+        background: var(--accent-color);
+        color: white;
+        border-radius: 20px;
+        font-size: calc(0.8rem + (var(--size) * 0.2rem));
+        opacity: 0.9;
+        transition: transform 0.3s ease;
+    }
+
+    .word:hover {
+        transform: translateY(-3px);
+        opacity: 1;
+    }
+
+    .recommendations-section {
+        background: var(--chat-bg);
+        padding: 2rem;
+        border-radius: 15px;
+    }
+
+    .recommendations-list {
+        list-style-type: none;
+        padding: 0;
+    }
+
+    .recommendations-list li {
+        padding: 1rem;
+        margin: 0.5rem 0;
+        background: var(--message-sent);
+        border-radius: 8px;
+        position: relative;
+        padding-left: 2rem;
+    }
+
+    .recommendations-list li::before {
+        content: '➔';
+        position: absolute;
+        left: 1rem;
+        color: var(--accent-color);
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Animate score bars
+        document.querySelectorAll('.score-fill').forEach(bar => {
+            const targetWidth = bar.dataset.score + '%'
+            setTimeout(() => {
+                bar.style.width = targetWidth
+            }, 100)
+        })
+    })
+</script>
+{% endblock %}
