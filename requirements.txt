@@ -8,5 +8,6 @@ langchain-pinecone
 langchain_community
 langchain_openai
 langchain_experimental
+gunicorn
 
 -e .
